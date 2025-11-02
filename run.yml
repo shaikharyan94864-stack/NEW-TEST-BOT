@@ -1,0 +1,41 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v2
+      with:
+        node-version: ${{ matrix.node-version }}
+        
+    - name: Install dependencies
+      run: npm install
+      
+    - name: Verify patch was applied
+      run: |
+        echo "🔍 Checking if group fix patch was applied..."
+        if grep -q "threadID.length < 15" node_modules/priyanshu-fca/src/sendMessage.js; then
+          echo "✅ Group fix patch applied successfully!"
+        else
+          echo "❌ ERROR: Patch was NOT applied! Bot will not work in new groups!"
+          exit 1
+        fi
+    
+    - name: Start bot
+      run: npm start
