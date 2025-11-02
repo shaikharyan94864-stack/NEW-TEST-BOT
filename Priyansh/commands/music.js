@@ -1,107 +1,122 @@
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
-const ytSearch = require("yt-search");
-
-module.exports = {
-  config: {
+module.exports.config = {
     name: "music",
-    version: "1.0.3",
+    version: "1.0.0",
     hasPermssion: 0,
-    credits: "𝐏𝐫𝐢𝐲𝐚𝐧𝐬𝐡 𝐑𝐚𝐣𝐩𝐮𝐭",
-    description: "Download YouTube song from keyword search and link",
-    commandCategory: "Media",
-    usages: "[songName] [type]",
-    cooldowns: 5,
-    dependencies: {
-      "node-fetch": "",
-      "yt-search": "",
-    },
-  },
+    credits: "Kashif Raza",
+    description: "Search and download music from YouTube",
+    commandCategory: "media",
+    usages: "[song name]",
+    cooldowns: 10
+};
 
-  run: async function ({ api, event, args }) {
-    let songName, type;
-
-    if (
-      args.length > 1 &&
-      (args[args.length - 1] === "audio" || args[args.length - 1] === "video")
-    ) {
-      type = args.pop();
-      songName = args.join(" ");
-    } else {
-      songName = args.join(" ");
-      type = "audio";
-    }
-
-    const processingMessage = await api.sendMessage(
-      "✅ Processing your request. Please wait...",
-      event.threadID,
-      null,
-      event.messageID
-    );
-
+module.exports.run = async ({ api, event, args }) => {
+    const axios = require('axios');
+    const fs = require('fs-extra');
+    const { threadID, messageID } = event;
+    
     try {
-      const searchResults = await ytSearch(songName);
-      if (!searchResults || !searchResults.videos.length) {
-        throw new Error("No results found for your search query.");
-      }
+        const query = args.join(" ");
+        
+        if (!query) {
+            return api.sendMessage("Please provide a song name!\n\nExample: /music Saiyaara", threadID, messageID);
+        }
 
-      const topResult = searchResults.videos[0];
-      const videoId = topResult.videoId;
+        // Send searching message
+        const searchMsg = await api.sendMessage("🔍 Searching for: " + query + "\nPlease wait...", threadID);
 
-      const apiKey = "priyansh-here";
-      const apiUrl = `https://priyanshuapi.xyz/youtube?id=${videoId}&type=${type}&apikey=${apiKey}`;
+        // Define the 6 animation steps (limited to 6 edits due to Messenger restrictions)
+        const progressBarLength = 20; // Length of the progress bar
+        const animationSteps = [
+            { message: "🔍 Searching...", progress: 10, delay: 1000 },
+            { message: "🎵 Song found!", progress: 30, delay: 1000 },
+            { message: "🎵 Downloading...", progress: 50, delay: 1500 },
+            { message: "🎵 Processing...", progress: 70, delay: 1500 },
+            { message: "🎵 Finalizing...", progress: 90, delay: 1000 },
+            { message: "🎵 Complete! ✅", progress: 100, delay: 500 }
+        ];
 
-      api.setMessageReaction("⌛", event.messageID, () => {}, true);
+        // Function to update progress bar
+        const updateProgress = async (step) => {
+            const filled = Math.round((step.progress / 100) * progressBarLength);
+            const empty = progressBarLength - filled;
+            const progressBar = "█".repeat(filled) + "░".repeat(empty);
+            const message = `${step.message}\n\n${progressBar} ${step.progress}%`;
+            await api.editMessage(message, searchMsg.messageID);
+        };
 
-      const downloadResponse = await axios.get(apiUrl);
-      const downloadUrl = downloadResponse.data.downloadUrl;
+        // Search for the song
+        api.setMessageReaction("⌛", event.messageID, () => {}, true);
+        await updateProgress(animationSteps[0]); // Edit 1: Searching (10%)
+        const searchUrl = `https://apis-keith.vercel.app/search/yts?query=${encodeURIComponent(query)}`;
+        const searchResponse = await axios.get(searchUrl);
+        await new Promise(resolve => setTimeout(resolve, animationSteps[0].delay));
 
-      const safeTitle = topResult.title.replace(/[^a-zA-Z0-9 \-_]/g, "");
-      const filename = `${safeTitle}.${type === "audio" ? "mp3" : "mp4"}`;
-      const downloadPath = path.join(__dirname, "cache", filename);
+        if (!searchResponse.data.status || !searchResponse.data.result || searchResponse.data.result.length === 0) {
+            api.setMessageReaction("❌", event.messageID, () => {}, true);
+            api.unsendMessage(searchMsg.messageID);
+            return api.sendMessage("No results found for your search!", threadID, messageID);
+        }
 
-      if (!fs.existsSync(path.dirname(downloadPath))) {
-        fs.mkdirSync(path.dirname(downloadPath), { recursive: true });
-      }
+        const firstResult = searchResponse.data.result[0];
+        
+        // Song found
+        await updateProgress(animationSteps[1]); // Edit 2: Song found (30%)
+        await new Promise(resolve => setTimeout(resolve, animationSteps[1].delay));
 
-      const response = await axios({
-        url: downloadUrl,
-        method: "GET",
-        responseType: "stream",
-      });
+        // Downloading
+        await updateProgress(animationSteps[2]); // Edit 3: Downloading (50%)
+        const downloadStartTime = Date.now();
+        const downloadUrl = `https://apis-keith.vercel.app/download/audio?url=${encodeURIComponent(firstResult.url)}`;
+        const downloadResponse = await axios.get(downloadUrl);
 
-      const fileStream = fs.createWriteStream(downloadPath);
-      response.data.pipe(fileStream);
+        if (!downloadResponse.data.status || !downloadResponse.data.result) {
+            api.setMessageReaction("❌", event.messageID, () => {}, true);
+            api.unsendMessage(searchMsg.messageID);
+            return api.sendMessage("Failed to download the audio!", threadID, messageID);
+        }
 
-      await new Promise((resolve, reject) => {
-        fileStream.on("finish", resolve);
-        fileStream.on("error", reject);
-      });
+        const audioUrl = downloadResponse.data.result;
+        const filePath = __dirname + `/cache/music_${Date.now()}.mp3`;
 
-      api.setMessageReaction("✅", event.messageID, () => {}, true);
+        // Adjust delay to match download time
+        const downloadTime = Date.now() - downloadStartTime;
+        const remainingDelay = Math.max(0, animationSteps[2].delay - downloadTime);
+        await new Promise(resolve => setTimeout(resolve, remainingDelay));
 
-      await api.sendMessage(
-        {
-          attachment: fs.createReadStream(downloadPath),
-          body: `🖤 Title: ${topResult.title}\n\n Here is your ${
-            type === "audio" ? "audio" : "video"
-          } 🎧:`,
-        },
-        event.threadID,
-        () => {
-          fs.unlinkSync(downloadPath);
-          api.unsendMessage(processingMessage.messageID);
-        },
-        event.messageID
-      );
+        // Processing
+        await updateProgress(animationSteps[3]); // Edit 4: Processing (70%)
+        const audioData = await axios.get(audioUrl, { responseType: 'arraybuffer' });
+        fs.writeFileSync(filePath, Buffer.from(audioData.data));
+        await new Promise(resolve => setTimeout(resolve, animationSteps[3].delay));
+
+        // Finalizing
+        await updateProgress(animationSteps[4]); // Edit 5: Finalizing (90%)
+        await new Promise(resolve => setTimeout(resolve, animationSteps[4].delay));
+
+        // Complete
+        await updateProgress(animationSteps[5]); // Edit 6: Complete (100%)
+        api.setMessageReaction("✅", event.messageID, () => {}, true);
+
+        // Send the audio file
+        await new Promise(resolve => setTimeout(resolve, animationSteps[5].delay));
+        await api.sendMessage({
+            body: firstResult.title + "\nDuration: " + firstResult.duration + "\nViews: " + parseInt(firstResult.views).toLocaleString() + "\nPublished: " + firstResult.published,
+            attachment: fs.createReadStream(filePath)
+        }, threadID, messageID);
+        
+        // Delete file and unsend progress message after sending
+        setTimeout(() => {
+            try {
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                api.unsendMessage(searchMsg.messageID);
+            } catch (cleanupError) {
+                console.log("Cleanup error:", cleanupError);
+            }
+        }, 3000);
+
     } catch (error) {
-      console.error(`Failed to download and send song: ${error.message}`);
-      api.sendMessage(
-        `Failed to download song: ${error.message}`,
-        event.threadID,
-        event.messageID
-      );
+        console.error(error);
+        api.setMessageReaction("❌", event.messageID, () => {}, true);
+        return api.sendMessage("Error: " + error.message + "\n\nPlease try again later!", threadID, messageID);
     }
-  },
 };
