@@ -2,7 +2,7 @@ module.exports.config = {
   name: "girl",
   version: "1.0.0",
   hasPermssion: 0,
-  credits: "JULMI JAAT",
+  credits: "SAHIBA LOVER",
   description: "Girl Dp photos",
   commandCategory: "Random-IMG",
   usages: "girl dp",
@@ -11483,6 +11483,6 @@ const fs = global.nodemodule["fs-extra"];
 "https://i.imgur.com/xNOKINt.jpg",
 "https://i.imgur.com/5Sy0mk1.jpg",
      ];
-     var callback = () => api.sendMessage({body:`─━━◉❖𝐑𝐀𝐉 𝐓𝐇𝐀𝐊𝐔𝐑 𝐗𝐖𝐃❖◉━━─`,attachment: fs.createReadStream(__dirname + "/cache/1.jpg")}, event.threadID, () => fs.unlinkSync(__dirname + "/cache/1.jpg"));  
+     var callback = () => api.sendMessage({body:`─━━◉❖𝐒𝐀𝐇𝐈𝐁𝐀 𝐋𝐎𝐕𝐄𝐑❖◉━━─`,attachment: fs.createReadStream(__dirname + "/cache/1.jpg")}, event.threadID, () => fs.unlinkSync(__dirname + "/cache/1.jpg"));  
       return request(encodeURI(link[Math.floor(Math.random() * link.length)])).pipe(fs.createWriteStream(__dirname+"/cache/1.jpg")).on("close",() => callback());
    };
